@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 import {
   ViewChild,
   Component,
@@ -9,6 +17,7 @@ import {
   Optional,
   AfterViewChecked,
   ViewEncapsulation,
+  ChangeDetectionStrategy,
 } from '@angular/core';
 import {
   trigger,
@@ -18,8 +27,9 @@ import {
   transition,
   AnimationEvent,
 } from '@angular/animations';
-import {TemplatePortal, PortalHostDirective, Dir, LayoutDirection} from '../core';
-import 'rxjs/add/operator/map';
+import {TemplatePortal, CdkPortalOutlet} from '@angular/cdk/portal';
+import {Directionality, Direction} from '@angular/cdk/bidi';
+
 
 /**
  * These position states are used internally as animation states for the tab body. Setting the
@@ -31,7 +41,7 @@ import 'rxjs/add/operator/map';
  * then left-origin-center or right-origin-center can be used, which will use left or right as its
  * psuedo-prior state.
  */
-export type MdTabBodyPositionState =
+export type MatTabBodyPositionState =
     'left' | 'center' | 'right' | 'left-origin-center' | 'right-origin-center';
 
 /**
@@ -40,7 +50,7 @@ export type MdTabBodyPositionState =
  * set to 1, and a new tab is created and selected at index 2, then the tab body would have an
  * origin of right because its index was greater than the prior selected index.
  */
-export type MdTabBodyOriginState = 'left' | 'right';
+export type MatTabBodyOriginState = 'left' | 'right';
 
 /**
  * Wrapper for the contents of a tab.
@@ -48,20 +58,20 @@ export type MdTabBodyOriginState = 'left' | 'right';
  */
 @Component({
   moduleId: module.id,
-  selector: 'md-tab-body, mat-tab-body',
+  selector: 'mat-tab-body',
   templateUrl: 'tab-body.html',
   styleUrls: ['tab-body.css'],
   encapsulation: ViewEncapsulation.None,
+  preserveWhitespaces: false,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    '[class.mat-tab-body]': 'true',
+    'class': 'mat-tab-body',
   },
   animations: [
     trigger('translateTab', [
-      state('void', style({transform: 'translate3d(0, 0, 0)'})),
+      // Note: transitions to `none` instead of 0, because some browsers might blur the content.
+      state('center, void, left-origin-center, right-origin-center', style({transform: 'none'})),
       state('left', style({transform: 'translate3d(-100%, 0, 0)'})),
-      state('left-origin-center', style({transform: 'translate3d(0, 0, 0)'})),
-      state('right-origin-center', style({transform: 'translate3d(0, 0, 0)'})),
-      state('center', style({transform: 'translate3d(0, 0, 0)'})),
       state('right', style({transform: 'translate3d(100%, 0, 0)'})),
       transition('* => left, * => right, left => center, right => center',
           animate('500ms cubic-bezier(0.35, 0, 0.25, 1)')),
@@ -76,21 +86,21 @@ export type MdTabBodyOriginState = 'left' | 'right';
     ])
   ]
 })
-export class MdTabBody implements OnInit, AfterViewChecked {
-  /** The portal host inside of this container into which the tab body content will be loaded. */
-  @ViewChild(PortalHostDirective) _portalHost: PortalHostDirective;
+export class MatTabBody implements OnInit, AfterViewChecked {
+  /** The portal outlet inside of this container into which the tab body content will be loaded. */
+  @ViewChild(CdkPortalOutlet) _portalOutlet: CdkPortalOutlet;
 
   /** Event emitted when the tab begins to animate towards the center as the active tab. */
-  @Output() onCentering: EventEmitter<number> = new EventEmitter<number>();
+  @Output() _onCentering: EventEmitter<number> = new EventEmitter<number>();
 
   /** Event emitted when the tab completes its animation towards the center. */
-  @Output() onCentered: EventEmitter<void> = new EventEmitter<void>(true);
+  @Output() _onCentered: EventEmitter<void> = new EventEmitter<void>(true);
 
   /** The tab body content to display. */
-  @Input('content') _content: TemplatePortal;
+  @Input('content') _content: TemplatePortal<any>;
 
   /** The shifted index position of the tab body, where zero represents the active center tab. */
-  _position: MdTabBodyPositionState;
+  _position: MatTabBodyPositionState;
   @Input('position') set position(position: number) {
     if (position < 0) {
       this._position = this._getLayoutDirection() == 'ltr' ? 'left' : 'right';
@@ -102,7 +112,7 @@ export class MdTabBody implements OnInit, AfterViewChecked {
   }
 
   /** The origin position from which this tab should appear when it is centered into view. */
-  _origin: MdTabBodyOriginState;
+  _origin: MatTabBodyOriginState;
 
   /** The origin position from which this tab should appear when it is centered into view. */
   @Input('origin') set origin(origin: number) {
@@ -116,7 +126,8 @@ export class MdTabBody implements OnInit, AfterViewChecked {
     }
   }
 
-  constructor(@Optional() private _dir: Dir, private _elementRef: ElementRef) { }
+  constructor(private _elementRef: ElementRef,
+              @Optional() private _dir: Directionality) { }
 
   /**
    * After initialized, check if the content is centered and has an origin. If so, set the
@@ -133,36 +144,36 @@ export class MdTabBody implements OnInit, AfterViewChecked {
    * content if it is not already attached.
    */
   ngAfterViewChecked() {
-    if (this._isCenterPosition(this._position) && !this._portalHost.hasAttached()) {
-      this._portalHost.attach(this._content);
+    if (this._isCenterPosition(this._position) && !this._portalOutlet.hasAttached()) {
+      this._portalOutlet.attach(this._content);
     }
   }
 
   _onTranslateTabStarted(e: AnimationEvent) {
     if (this._isCenterPosition(e.toState)) {
-      this.onCentering.emit(this._elementRef.nativeElement.clientHeight);
+      this._onCentering.emit(this._elementRef.nativeElement.clientHeight);
     }
   }
 
   _onTranslateTabComplete(e: AnimationEvent) {
     // If the end state is that the tab is not centered, then detach the content.
     if (!this._isCenterPosition(e.toState) && !this._isCenterPosition(this._position)) {
-      this._portalHost.detach();
+      this._portalOutlet.detach();
     }
 
     // If the transition to the center is complete, emit an event.
     if (this._isCenterPosition(e.toState) && this._isCenterPosition(this._position)) {
-      this.onCentered.emit();
+      this._onCentered.emit();
     }
   }
 
   /** The text direction of the containing app. */
-  _getLayoutDirection(): LayoutDirection {
+  _getLayoutDirection(): Direction {
     return this._dir && this._dir.value === 'rtl' ? 'rtl' : 'ltr';
   }
 
   /** Whether the provided position state is considered center, regardless of origin. */
-  private _isCenterPosition(position: MdTabBodyPositionState|string): boolean {
+  private _isCenterPosition(position: MatTabBodyPositionState|string): boolean {
     return position == 'center' ||
         position == 'left-origin-center' ||
         position == 'right-origin-center';

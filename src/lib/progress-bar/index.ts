@@ -1,15 +1,9 @@
-import {NgModule} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MdCommonModule} from '../core';
-import {MdProgressBar} from './progress-bar';
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
 
-
-@NgModule({
-  imports: [CommonModule, MdCommonModule],
-  exports: [MdProgressBar, MdCommonModule],
-  declarations: [MdProgressBar],
-})
-export class MdProgressBarModule {}
-
-
-export * from './progress-bar';
+export * from './public-api';

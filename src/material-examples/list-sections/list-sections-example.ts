@@ -1,10 +1,12 @@
 import {Component} from '@angular/core';
 
-
+/**
+ * @title List with sections
+ */
 @Component({
   selector: 'list-sections-example',
-  styleUrls: ['./list-sections-example.css'],
-  templateUrl: './list-sections-example.html',
+  styleUrls: ['list-sections-example.css'],
+  templateUrl: 'list-sections-example.html',
 })
 export class ListSectionsExample {
   folders = [

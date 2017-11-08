@@ -1,6 +1,15 @@
-import {Injectable, isDevMode} from '@angular/core';
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
+import {Injectable, Optional} from '@angular/core';
 import {HammerGestureConfig} from '@angular/platform-browser';
-import {HammerStatic, HammerInstance, Recognizer, RecognizerStatic} from './gesture-annotations';
+import {MatCommonModule} from '../common-behaviors/common-module';
+import {HammerInstance, HammerStatic, Recognizer, RecognizerStatic} from './gesture-annotations';
 
 /* Adjusts configuration of our gesture library, Hammer. */
 @Injectable()
@@ -17,14 +26,10 @@ export class GestureConfig extends HammerGestureConfig {
     'slideleft'
   ] : [];
 
-  constructor() {
+  constructor(@Optional() commonModule?: MatCommonModule) {
     super();
-
-    if (!this._hammer && isDevMode()) {
-      console.warn(
-        'Could not find HammerJS. Certain Angular Material ' +
-        'components may not work correctly.'
-      );
+    if (commonModule) {
+      commonModule._checkHammerIsAvailable();
     }
   }
 

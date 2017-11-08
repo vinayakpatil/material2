@@ -1,27 +1,34 @@
-import {Directive, ElementRef, Input} from '@angular/core';
-import {coerceBooleanProperty} from '../core/coercion/boolean-property';
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
 
+import {Directive, ElementRef} from '@angular/core';
+import {CanDisable, mixinDisabled} from '@angular/material/core';
+
+// Boilerplate for applying mixins to MatTabLabelWrapper.
+/** @docs-private */
+export class MatTabLabelWrapperBase {}
+export const _MatTabLabelWrapperMixinBase = mixinDisabled(MatTabLabelWrapperBase);
 
 /**
- * Used in the `md-tab-group` view to display tab labels.
+ * Used in the `mat-tab-group` view to display tab labels.
  * @docs-private
  */
 @Directive({
-  selector: '[md-tab-label-wrapper], [mat-tab-label-wrapper]',
+  selector: '[matTabLabelWrapper]',
+  inputs: ['disabled'],
   host: {
     '[class.mat-tab-disabled]': 'disabled'
   }
 })
-export class MdTabLabelWrapper {
-  constructor(public elementRef: ElementRef) {}
-
-  /** Whether the tab label is disabled.  */
-  private _disabled: boolean = false;
-
-  /** Whether the element is disabled. */
-  @Input()
-  get disabled() { return this._disabled; }
-  set disabled(value: any) { this._disabled = coerceBooleanProperty(value); }
+export class MatTabLabelWrapper extends _MatTabLabelWrapperMixinBase implements CanDisable {
+  constructor(public elementRef: ElementRef) {
+    super();
+  }
 
   /** Sets focus on the wrapper element */
   focus(): void {

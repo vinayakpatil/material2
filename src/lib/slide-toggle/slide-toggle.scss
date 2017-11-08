@@ -2,7 +2,7 @@
 @import '../core/ripple/ripple';
 @import '../core/style/elevation';
 @import '../core/style/vendor-prefixes';
-@import '../core/a11y/a11y';
+@import '../../cdk/a11y/a11y';
 
 $mat-slide-toggle-thumb-size: 20px !default;
 $mat-slide-toggle-bar-border-radius: 8px !default;
@@ -41,14 +41,6 @@ $mat-slide-toggle-bar-track-width: $mat-slide-toggle-bar-width - $mat-slide-togg
   }
 }
 
-// The content element is responsible for the users content.
-// It will apply the given typography styles and align at the end of the slide-toggle.
-.mat-slide-toggle-content {
-  font-size: $mat-body-font-size-base;
-  font-family: $mat-font-family;
-  font-weight: 500;
-}
-
 // The label element is our root container for the slide-toggle / switch indicator and label text.
 // It has to be a label, to support accessibility for the visual hidden input.
 .mat-slide-toggle-label {
@@ -80,6 +72,11 @@ $mat-slide-toggle-bar-track-width: $mat-slide-toggle-bar-width - $mat-slide-togg
     margin-left: $mat-slide-toggle-spacing;
     margin-right: 0;
   }
+}
+
+.mat-slide-toggle-bar-no-side-margin {
+  margin-left: 0;
+  margin-right: 0;
 }
 
 // The thumb container is responsible for the dragging functionality.

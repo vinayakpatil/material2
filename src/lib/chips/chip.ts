@@ -1,168 +1,318 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
+import {FocusableOption} from '@angular/cdk/a11y';
+import {coerceBooleanProperty} from '@angular/cdk/coercion';
+import {BACKSPACE, DELETE, SPACE} from '@angular/cdk/keycodes';
 import {
-  Component,
+  Directive,
   ElementRef,
   EventEmitter,
   Input,
   OnDestroy,
-  OnInit,
   Output,
   Renderer2,
 } from '@angular/core';
+import {CanColor, CanDisable, mixinColor, mixinDisabled} from '@angular/material/core';
+import {Subject} from 'rxjs/Subject';
 
-import {Focusable} from '../core/a11y/focus-key-manager';
-import {coerceBooleanProperty} from '../core/coercion/boolean-property';
 
-export interface MdChipEvent {
-  chip: MdChip;
+export interface MatChipEvent {
+  chip: MatChip;
+}
+
+/** Event object emitted by MatChip when selected or deselected. */
+export class MatChipSelectionChange {
+  constructor(public source: MatChip, public selected: boolean, public isUserInput = false) { }
+}
+
+
+// Boilerplate for applying mixins to MatChip.
+/** @docs-private */
+export class MatChipBase {
+  constructor(public _renderer: Renderer2, public _elementRef: ElementRef) {
+  }
+}
+
+export const _MatChipMixinBase = mixinColor(mixinDisabled(MatChipBase), 'primary');
+
+
+/**
+ * Dummy directive to add CSS class to basic chips.
+ * @docs-private
+ */
+@Directive({
+  selector: `mat-basic-chip, [mat-basic-chip]`,
+  host: {'class': 'mat-basic-chip'},
+})
+export class MatBasicChip {
 }
 
 /**
- * Material design styled Chip component. Used inside the MdChipList component.
+ * Material design styled Chip component. Used inside the MatChipList component.
  */
-@Component({
-  selector: `md-basic-chip, [md-basic-chip], md-chip, [md-chip],
-             mat-basic-chip, [mat-basic-chip], mat-chip, [mat-chip]`,
-  template: `<ng-content></ng-content>`,
+@Directive({
+  selector: `mat-basic-chip, [mat-basic-chip], mat-chip, [mat-chip]`,
+  inputs: ['color', 'disabled'],
+  exportAs: 'matChip',
   host: {
-    '[class.mat-chip]': 'true',
+    'class': 'mat-chip',
     'tabindex': '-1',
     'role': 'option',
-
     '[class.mat-chip-selected]': 'selected',
-    '[attr.disabled]': 'disabled',
-    '[attr.aria-disabled]': '_isAriaDisabled',
+    '[attr.disabled]': 'disabled || null',
+    '[attr.aria-disabled]': 'disabled.toString()',
+    '[attr.aria-selected]': 'ariaSelected',
+    '(click)': '_handleClick($event)',
+    '(keydown)': '_handleKeydown($event)',
+    '(focus)': '_hasFocus = true',
+    '(blur)': '_blur()',
+  },
 
-    '(click)': '_handleClick($event)'
-  }
 })
-export class MdChip implements Focusable, OnInit, OnDestroy {
+export class MatChip extends _MatChipMixinBase implements FocusableOption, OnDestroy, CanColor,
+    CanDisable {
 
-  /** Whether or not the chip is disabled. Disabled chips cannot be focused. */
-  protected _disabled: boolean = null;
+  protected _value: any;
 
-  /** Whether or not the chip is selected. */
   protected _selected: boolean = false;
 
-  /** The palette color of selected chips. */
-  protected _color: string = 'primary';
+  protected _selectable: boolean = true;
 
-  /** Emitted when the chip is focused. */
-  onFocus = new EventEmitter<MdChipEvent>();
+  protected _removable: boolean = true;
 
-  /** Emitted when the chip is selected. */
-  @Output() select = new EventEmitter<MdChipEvent>();
+  /** Whether the chip has focus. */
+  _hasFocus: boolean = false;
 
-  /** Emitted when the chip is deselected. */
-  @Output() deselect = new EventEmitter<MdChipEvent>();
-
-  /** Emitted when the chip is destroyed. */
-  @Output() destroy = new EventEmitter<MdChipEvent>();
-
-  constructor(protected _renderer: Renderer2, protected _elementRef: ElementRef) { }
-
-  ngOnInit(): void {
-    this._addDefaultCSSClass();
-    this._updateColor(this._color);
-  }
-
-  ngOnDestroy(): void {
-    this.destroy.emit({chip: this});
-  }
-
-  /** Whether or not the chip is disabled. */
-  @Input() get disabled(): boolean {
-    return this._disabled;
-  }
-
-  /** Sets the disabled state of the chip. */
-  set disabled(value: boolean) {
-    this._disabled = coerceBooleanProperty(value) ? true : null;
-  }
-
-  /** A String representation of the current disabled state. */
-  get _isAriaDisabled(): string {
-    return String(coerceBooleanProperty(this.disabled));
-  }
-
-  /** Whether or not this chip is selected. */
-  @Input() get selected(): boolean {
+  /** Whether the chip is selected. */
+  @Input()
+  get selected(): boolean {
     return this._selected;
   }
-
   set selected(value: boolean) {
     this._selected = coerceBooleanProperty(value);
-
-    if (this._selected) {
-      this.select.emit({chip: this});
-    } else {
-      this.deselect.emit({chip: this});
-    }
+    this.selectionChange.emit({
+      source: this,
+      isUserInput: false,
+      selected: value
+    });
+  }
+  /** The value of the chip. Defaults to the content inside <mat-chip> tags. */
+  @Input()
+  get value(): any {
+    return this._value != undefined
+      ? this._value
+      : this._elementRef.nativeElement.textContent;
+  }
+  set value(newValue: any) {
+    this._value = newValue;
   }
 
   /**
-   * Toggles the current selected state of this chip.
-   * @return Whether the chip is selected.
+   * Whether or not the chips are selectable. When a chip is not selectable,
+   * changes to it's selected state are always ignored.
    */
-  toggleSelected(): boolean {
-    this.selected = !this.selected;
+  @Input() get selectable(): boolean {
+    return this._selectable;
+  }
+
+
+  set selectable(value: boolean) {
+    this._selectable = coerceBooleanProperty(value);
+  }
+
+  /**
+   * Determines whether or not the chip displays the remove styling and emits (remove) events.
+   */
+  @Input() get removable(): boolean {
+    return this._removable;
+  }
+
+
+  set removable(value: boolean) {
+    this._removable = coerceBooleanProperty(value);
+  }
+
+  /** Emits when the chip is focused. */
+  _onFocus = new Subject<MatChipEvent>();
+
+  /** Emits when the chip is blured. */
+  _onBlur = new Subject<MatChipEvent>();
+
+  /** Emitted when the chip is selected or deselected. */
+  @Output() selectionChange = new EventEmitter<MatChipSelectionChange>();
+
+  /** Emitted when the chip is destroyed. */
+  @Output() destroyed = new EventEmitter<MatChipEvent>();
+
+  /**
+   * Emitted when the chip is destroyed.
+   * @deprecated Use 'destroyed' instead.
+   */
+  @Output() destroy = this.destroyed;
+
+  /** Emitted when a chip is to be removed. */
+  @Output() removed = new EventEmitter<MatChipEvent>();
+
+  /**
+   * Emitted when a chip is to be removed.
+   * @deprecated Use `removed` instead.
+   */
+  @Output('remove') onRemove = this.removed;
+
+  get ariaSelected(): string | null {
+    return this.selectable ? this.selected.toString() : null;
+  }
+
+  constructor(renderer: Renderer2, public _elementRef: ElementRef) {
+    super(renderer, _elementRef);
+  }
+
+  ngOnDestroy(): void {
+    this.destroyed.emit({chip: this});
+  }
+
+  /** Selects the chip. */
+  select(): void {
+    this._selected = true;
+    this.selectionChange.emit({
+      source: this,
+      isUserInput: false,
+      selected: true
+    });
+  }
+
+  /** Deselects the chip. */
+  deselect(): void {
+    this._selected = false;
+    this.selectionChange.emit({
+      source: this,
+      isUserInput: false,
+      selected: false
+    });
+  }
+
+  /** Select this chip and emit selected event */
+  selectViaInteraction(): void {
+    this._selected = true;
+    // Emit select event when selected changes.
+    this.selectionChange.emit({
+      source: this,
+      isUserInput: true,
+      selected: true
+    });
+  }
+
+  /** Toggles the current selected state of this chip. */
+  toggleSelected(isUserInput: boolean = false): boolean {
+    this._selected = !this.selected;
+
+    this.selectionChange.emit({
+      source: this,
+      isUserInput,
+      selected: this._selected
+    });
+
     return this.selected;
-  }
-
-  /** The color of the chip. Can be `primary`, `accent`, or `warn`. */
-  @Input() get color(): string {
-    return this._color;
-  }
-
-  set color(value: string) {
-    this._updateColor(value);
   }
 
   /** Allows for programmatic focusing of the chip. */
   focus(): void {
     this._elementRef.nativeElement.focus();
-    this.onFocus.emit({chip: this});
+    this._onFocus.next({chip: this});
+  }
+
+  /**
+   * Allows for programmatic removal of the chip. Called by the MatChipList when the DELETE or
+   * BACKSPACE keys are pressed.
+   *
+   * Informs any listeners of the removal request. Does not remove the chip from the DOM.
+   */
+  remove(): void {
+    if (this.removable) {
+      this.removed.emit({chip: this});
+    }
   }
 
   /** Ensures events fire properly upon click. */
   _handleClick(event: Event) {
     // Check disabled
     if (this.disabled) {
-      event.preventDefault();
-      event.stopPropagation();
-    } else {
-      this.focus();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.focus();
+  }
+
+  /** Handle custom key presses. */
+  _handleKeydown(event: KeyboardEvent): void {
+    if (this.disabled) {
+      return;
+    }
+
+    switch (event.keyCode) {
+      case DELETE:
+      case BACKSPACE:
+        // If we are removable, remove the focused chip
+        this.remove();
+        // Always prevent so page navigation does not occur
+        event.preventDefault();
+        break;
+      case SPACE:
+        // If we are selectable, toggle the focused chip
+        if (this.selectable) {
+          this.toggleSelected(true);
+        }
+
+        // Always prevent space from scrolling the page since the list has focus
+        event.preventDefault();
+        break;
     }
   }
 
-  /** Initializes the appropriate CSS classes based on the chip type (basic or standard). */
-  private _addDefaultCSSClass() {
-    let el: HTMLElement = this._elementRef.nativeElement;
+  _blur(): void {
+    this._hasFocus = false;
+    this._onBlur.next({chip: this});
+  }
+}
 
-    // Always add the `mat-chip` class
-    this._renderer.addClass(el, 'mat-chip');
 
-    // If we are a basic chip, also add the `mat-basic-chip` class for :not() targeting
-    if (el.nodeName.toLowerCase() == 'mat-basic-chip' || el.hasAttribute('mat-basic-chip') ||
-        el.nodeName.toLowerCase() == 'md-basic-chip' || el.hasAttribute('md-basic-chip')) {
-      this._renderer.addClass(el, 'mat-basic-chip');
-    }
+/**
+ * Applies proper (click) support and adds styling for use with the Material Design "cancel" icon
+ * available at https://material.io/icons/#ic_cancel.
+ *
+ * Example:
+ *
+ *     <mat-chip>
+ *       <mat-icon matChipRemove>cancel</mat-icon>
+ *     </mat-chip>
+ *
+ * You *may* use a custom icon, but you may need to override the `mat-chip-remove` positioning
+ * styles to properly center the icon within the chip.
+ */
+@Directive({
+  selector: '[matChipRemove]',
+  host: {
+    'class': 'mat-chip-remove',
+    '(click)': '_handleClick()',
+  }
+})
+export class MatChipRemove {
+  constructor(protected _parentChip: MatChip) {
   }
 
-  /** Updates the private _color variable and the native element. */
-  private _updateColor(newColor: string) {
-    this._setElementColor(this._color, false);
-    this._setElementColor(newColor, true);
-    this._color = newColor;
-  }
-
-  /** Sets the mat-color on the native element. */
-  private _setElementColor(color: string, isAdd: boolean) {
-    if (color != null && color != '') {
-      if (isAdd) {
-        this._renderer.addClass(this._elementRef.nativeElement, `mat-${color}`);
-      } else {
-        this._renderer.removeClass(this._elementRef.nativeElement, `mat-${color}`);
-      }
+  /** Calls the parent chip's public `remove()` method if applicable. */
+  _handleClick(): void {
+    if (this._parentChip.removable) {
+      this._parentChip.remove();
     }
   }
 }

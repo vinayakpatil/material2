@@ -1,15 +1,9 @@
-import {NgModule} from '@angular/core';
-import {MdChipList} from './chip-list';
-import {MdChip} from './chip';
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
 
-
-@NgModule({
-  imports: [],
-  exports: [MdChipList, MdChip],
-  declarations: [MdChipList, MdChip]
-})
-export class MdChipsModule {}
-
-
-export * from './chip-list';
-export * from './chip';
+export * from './public-api';

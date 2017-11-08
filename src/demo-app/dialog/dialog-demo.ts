@@ -1,7 +1,8 @@
 import {Component, Inject, ViewChild, TemplateRef} from '@angular/core';
 import {DOCUMENT} from '@angular/platform-browser';
-import {MdDialog, MdDialogRef, MdDialogConfig, MD_DIALOG_DATA} from '@angular/material';
+import {MatDialog, MatDialogConfig, MatDialogRef, MAT_DIALOG_DATA} from '@angular/material';
 
+const defaultDialogConfig = new MatDialogConfig();
 
 @Component({
   moduleId: module.id,
@@ -10,15 +11,21 @@ import {MdDialog, MdDialogRef, MdDialogConfig, MD_DIALOG_DATA} from '@angular/ma
   styleUrls: ['dialog-demo.css'],
 })
 export class DialogDemo {
-  dialogRef: MdDialogRef<JazzDialog>;
-  lastCloseResult: string;
+  dialogRef: MatDialogRef<JazzDialog> | null;
+  lastAfterClosedResult: string;
+  lastBeforeCloseResult: string;
   actionsAlignment: string;
-  config: MdDialogConfig = {
+  config = {
     disableClose: false,
+    panelClass: 'custom-overlay-pane-class',
     hasBackdrop: true,
     backdropClass: '',
     width: '',
     height: '',
+    minWidth: '',
+    minHeight: '',
+    maxWidth: defaultDialogConfig.maxWidth,
+    maxHeight: '',
     position: {
       top: '',
       bottom: '',
@@ -33,11 +40,11 @@ export class DialogDemo {
 
   @ViewChild(TemplateRef) template: TemplateRef<any>;
 
-  constructor(public dialog: MdDialog, @Inject(DOCUMENT) doc: any) {
+  constructor(public dialog: MatDialog, @Inject(DOCUMENT) doc: any) {
     // Possible useful example for the open and closeAll events.
     // Adding a class to the body if a dialog opens and
     // removing it after all open dialogs are closed
-    dialog.afterOpen.subscribe((ref: MdDialogRef<any>) => {
+    dialog.afterOpen.subscribe(() => {
       if (!doc.body.classList.contains('no-scroll')) {
         doc.body.classList.add('no-scroll');
       }
@@ -50,8 +57,11 @@ export class DialogDemo {
   openJazz() {
     this.dialogRef = this.dialog.open(JazzDialog, this.config);
 
+    this.dialogRef.beforeClose().subscribe((result: string) => {
+      this.lastBeforeCloseResult = result;
+    });
     this.dialogRef.afterClosed().subscribe((result: string) => {
-      this.lastCloseResult = result;
+      this.lastAfterClosedResult = result;
       this.dialogRef = null;
     });
   }
@@ -72,7 +82,11 @@ export class DialogDemo {
   selector: 'demo-jazz-dialog',
   template: `
   <p>It's Jazz!</p>
-  <p><label>How much? <input #howMuch></label></p>
+
+  <mat-form-field>
+    <input matInput placeholder="How much?" #howMuch>
+  </mat-form-field>
+
   <p> {{ data.message }} </p>
   <button type="button" (click)="dialogRef.close(howMuch.value)">Close dialog</button>
   <button (click)="togglePosition()">Change dimensions</button>`
@@ -81,8 +95,8 @@ export class JazzDialog {
   private _dimesionToggle = false;
 
   constructor(
-    public dialogRef: MdDialogRef<JazzDialog>,
-    @Inject(MD_DIALOG_DATA) public data: any) { }
+    public dialogRef: MatDialogRef<JazzDialog>,
+    @Inject(MAT_DIALOG_DATA) public data: any) { }
 
   togglePosition(): void {
     this._dimesionToggle = !this._dimesionToggle;
@@ -108,9 +122,9 @@ export class JazzDialog {
     }`
   ],
   template: `
-    <h2 md-dialog-title>Neptune</h2>
+    <h2 mat-dialog-title>Neptune</h2>
 
-    <md-dialog-content>
+    <mat-dialog-content>
       <img src="https://upload.wikimedia.org/wikipedia/commons/5/56/Neptune_Full.jpg"/>
 
       <p>
@@ -122,32 +136,32 @@ export class JazzDialog {
         astronomical units (4.50×109 km). It is named after the Roman god of the sea and has the
         astronomical symbol ♆, a stylised version of the god Neptune's trident.
       </p>
-    </md-dialog-content>
+    </mat-dialog-content>
 
-    <md-dialog-actions [attr.align]="actionsAlignment">
+    <mat-dialog-actions [attr.align]="actionsAlignment">
       <button
-        md-raised-button
+        mat-raised-button
         color="primary"
-        md-dialog-close>Close</button>
+        mat-dialog-close>Close</button>
 
       <a
-        md-button
+        mat-button
         color="primary"
         href="https://en.wikipedia.org/wiki/Neptune"
         target="_blank">Read more on Wikipedia</a>
 
       <button
-        md-button
+        mat-button
         color="secondary"
         (click)="showInStackedDialog()">
         Show in Dialog</button>
-    </md-dialog-actions>
+    </mat-dialog-actions>
   `
 })
 export class ContentElementDialog {
   actionsAlignment: string;
 
-  constructor(public dialog: MdDialog) { }
+  constructor(public dialog: MatDialog) { }
 
   showInStackedDialog() {
     this.dialog.open(IFrameDialog);
@@ -162,18 +176,18 @@ export class ContentElementDialog {
     }`
   ],
   template: `
-    <h2 md-dialog-title>Neptune</h2>
+    <h2 mat-dialog-title>Neptune</h2>
 
-    <md-dialog-content>
+    <mat-dialog-content>
       <iframe frameborder="0" src="https://en.wikipedia.org/wiki/Neptune"></iframe>
-    </md-dialog-content>
+    </mat-dialog-content>
 
-    <md-dialog-actions>
+    <mat-dialog-actions>
       <button
-        md-raised-button
+        mat-raised-button
         color="primary"
-        md-dialog-close>Close</button>
-    </md-dialog-actions>
+        mat-dialog-close>Close</button>
+    </mat-dialog-actions>
   `
 })
 export class IFrameDialog {

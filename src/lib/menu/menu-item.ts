@@ -1,51 +1,80 @@
-import {Component, ElementRef, Input} from '@angular/core';
-import {Focusable} from '../core/a11y/focus-key-manager';
-import {coerceBooleanProperty} from '../core/coercion/boolean-property';
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
+import {FocusableOption} from '@angular/cdk/a11y';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  OnDestroy,
+  ViewEncapsulation,
+} from '@angular/core';
+import {CanDisable, mixinDisabled} from '@angular/material/core';
+import {Subject} from 'rxjs/Subject';
+
+// Boilerplate for applying mixins to MatMenuItem.
+/** @docs-private */
+export class MatMenuItemBase {}
+export const _MatMenuItemMixinBase = mixinDisabled(MatMenuItemBase);
 
 /**
- * This directive is intended to be used inside an md-menu tag.
+ * This directive is intended to be used inside an mat-menu tag.
  * It exists mostly to set the role attribute.
  */
 @Component({
   moduleId: module.id,
-  selector: '[md-menu-item], [mat-menu-item]',
+  selector: '[mat-menu-item]',
+  exportAs: 'matMenuItem',
+  inputs: ['disabled'],
   host: {
     'role': 'menuitem',
-    '[class.mat-menu-item]': 'true',
+    'class': 'mat-menu-item',
+    '[class.mat-menu-item-highlighted]': '_highlighted',
+    '[class.mat-menu-item-submenu-trigger]': '_triggersSubmenu',
     '[attr.tabindex]': '_getTabIndex()',
     '[attr.aria-disabled]': 'disabled.toString()',
-    '[attr.disabled]': '_getDisabledAttr()',
+    '[attr.disabled]': 'disabled || null',
     '(click)': '_checkDisabled($event)',
+    '(mouseenter)': '_emitHoverEvent()',
   },
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
+  preserveWhitespaces: false,
   templateUrl: 'menu-item.html',
-  exportAs: 'mdMenuItem'
 })
-export class MdMenuItem implements Focusable {
-  /** Whether the menu item is disabled */
-  private _disabled: boolean = false;
+export class MatMenuItem extends _MatMenuItemMixinBase implements FocusableOption, CanDisable,
+  OnDestroy {
 
-  constructor(private _elementRef: ElementRef) {}
+  /** Stream that emits when the menu item is hovered. */
+  _hovered: Subject<MatMenuItem> = new Subject();
+
+  /** Whether the menu item is highlighted. */
+  _highlighted: boolean = false;
+
+  /** Whether the menu item acts as a trigger for a sub-menu. */
+  _triggersSubmenu: boolean = false;
+
+  constructor(private _elementRef: ElementRef) {
+    super();
+  }
 
   /** Focuses the menu item. */
   focus(): void {
     this._getHostElement().focus();
   }
 
-  /** Whether the menu item is disabled. */
-  @Input()
-  get disabled() { return this._disabled; }
-  set disabled(value: any) {
-    this._disabled = coerceBooleanProperty(value);
+  ngOnDestroy() {
+    this._hovered.complete();
   }
 
   /** Used to set the `tabindex`. */
   _getTabIndex(): string {
-    return this._disabled ? '-1' : '0';
-  }
-
-  /** Used to set the HTML `disabled` attribute. Necessary for links to be disabled properly. */
-  _getDisabledAttr(): boolean {
-    return this._disabled ? true : null;
+    return this.disabled ? '-1' : '0';
   }
 
   /** Returns the host DOM element. */
@@ -60,5 +89,34 @@ export class MdMenuItem implements Focusable {
       event.stopPropagation();
     }
   }
+
+  /** Emits to the hover stream. */
+  _emitHoverEvent() {
+    if (!this.disabled) {
+      this._hovered.next(this);
+    }
+  }
+
+  /** Gets the label to be used when determining whether the option should be focused. */
+  getLabel(): string {
+    const element: HTMLElement = this._elementRef.nativeElement;
+    let output = '';
+
+    if (element.childNodes) {
+      const length = element.childNodes.length;
+
+      // Go through all the top-level text nodes and extract their text.
+      // We skip anything that's not a text node to prevent the text from
+      // being thrown off by something like an icon.
+      for (let i = 0; i < length; i++) {
+        if (element.childNodes[i].nodeType === Node.TEXT_NODE) {
+          output += element.childNodes[i].textContent;
+        }
+      }
+    }
+
+    return output.trim();
+  }
+
 }
 

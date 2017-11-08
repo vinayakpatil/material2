@@ -9,7 +9,7 @@ export interface Task {
 
 @Component({
   moduleId: module.id,
-  selector: 'md-checkbox-demo-nested-checklist',
+  selector: 'mat-checkbox-demo-nested-checklist',
   styles: [`
     li {
       margin-bottom: 4px;
@@ -17,7 +17,7 @@ export interface Task {
   `],
   templateUrl: 'nested-checklist.html',
 })
-export class MdCheckboxDemoNestedChecklist {
+export class MatCheckboxDemoNestedChecklist {
   tasks: Task[] = [
     {
       name: 'Reminders',
@@ -41,6 +41,11 @@ export class MdCheckboxDemoNestedChecklist {
 
   allComplete(task: Task): boolean {
     let subtasks = task.subtasks;
+
+    if (!subtasks) {
+      return false;
+    }
+
     return subtasks.every(t => t.completed) ? true
         : subtasks.every(t => !t.completed) ? false
         : task.completed;
@@ -58,7 +63,7 @@ export class MdCheckboxDemoNestedChecklist {
 
 @Component({
   moduleId: module.id,
-  selector: 'md-checkbox-demo',
+  selector: 'mat-checkbox-demo',
   templateUrl: 'checkbox-demo.html',
   styleUrls: ['checkbox-demo.css'],
 })

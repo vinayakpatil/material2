@@ -1,16 +1,23 @@
-import {Injectable, SecurityContext, Optional, SkipSelf} from '@angular/core';
-import {SafeResourceUrl, DomSanitizer} from '@angular/platform-browser';
-import {Http} from '@angular/http';
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
+import {catchError} from 'rxjs/operators/catchError';
+import {tap} from 'rxjs/operators/tap';
+import {finalize} from 'rxjs/operators/finalize';
+import {map} from 'rxjs/operators/map';
+import {share} from 'rxjs/operators/share';
+import {Injectable, Optional, SecurityContext, SkipSelf} from '@angular/core';
+import {HttpClient} from '@angular/common/http';
+import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
 import {Observable} from 'rxjs/Observable';
-import 'rxjs/add/observable/forkJoin';
-import 'rxjs/add/observable/of';
-import 'rxjs/add/operator/map';
-import 'rxjs/add/operator/filter';
-import 'rxjs/add/operator/do';
-import 'rxjs/add/operator/share';
-import 'rxjs/add/operator/finally';
-import 'rxjs/add/operator/catch';
-import 'rxjs/add/observable/throw';
+import {forkJoin} from 'rxjs/observable/forkJoin';
+import {of as observableOf} from 'rxjs/observable/of';
+import {_throw as observableThrow} from 'rxjs/observable/throw';
 
 
 /**
@@ -18,19 +25,31 @@ import 'rxjs/add/observable/throw';
  * load an icon with a name that cannot be found.
  * @docs-private
  */
-export function getMdIconNameNotFoundError(iconName: string): Error {
-  return new Error(`Unable to find icon with the name "${iconName}"`);
+export function getMatIconNameNotFoundError(iconName: string): Error {
+  return Error(`Unable to find icon with the name "${iconName}"`);
 }
 
 
 /**
  * Returns an exception to be thrown when the consumer attempts to use
- * `<md-icon>` without including @angular/http.
+ * `<mat-icon>` without including @angular/http.
  * @docs-private
  */
-export function getMdIconNoHttpProviderError(): Error {
-  return new Error('Could not find Http provider for use with Angular Material icons. ' +
-                   'Please include the HttpModule from @angular/http in your app imports.');
+export function getMatIconNoHttpProviderError(): Error {
+  return Error('Could not find HttpClient provider for use with Angular Material icons. ' +
+               'Please include the HttpClientModule from @angular/common/http in your ' +
+               'app imports.');
+}
+
+
+/**
+ * Returns an exception to be thrown when a URL couldn't be sanitized.
+ * @param url URL that was attempted to be sanitized.
+ * @docs-private
+ */
+export function getMatIconFailedToSanitizeError(url: SafeResourceUrl): Error {
+  return Error(`The URL provided to MatIconRegistry was not trusted as a resource URL ` +
+               `via Angular's DomSanitizer. Attempted URL was "${url}".`);
 }
 
 /**
@@ -38,19 +57,19 @@ export function getMdIconNoHttpProviderError(): Error {
  * @docs-private
  */
 class SvgIconConfig {
-  svgElement: SVGElement = null;
+  svgElement: SVGElement | null = null;
   constructor(public url: SafeResourceUrl) { }
 }
 
 /**
- * Service to register and display icons used by the <md-icon> component.
+ * Service to register and display icons used by the <mat-icon> component.
  * - Registers icon URLs by namespace and name.
  * - Registers icon set URLs by namespace.
  * - Registers aliases for CSS classes, for use with icon fonts.
  * - Loads icons from URLs and extracts individual icons from icon sets.
  */
 @Injectable()
-export class MdIconRegistry {
+export class MatIconRegistry {
   /**
    * URLs and cached SVG elements for individual icons. Keys are of the format "[namespace]:[icon]".
    */
@@ -72,13 +91,13 @@ export class MdIconRegistry {
   private _fontCssClassesByAlias = new Map<string, string>();
 
   /**
-   * The CSS class to apply when an <md-icon> component has no icon name, url, or font specified.
+   * The CSS class to apply when an <mat-icon> component has no icon name, url, or font specified.
    * The default 'material-icons' value assumes that the material icon font has been loaded as
    * described at http://google.github.io/material-design-icons/#icon-font-for-the-web
    */
   private _defaultFontSetClass = 'material-icons';
 
-  constructor(@Optional() private _http: Http, private _sanitizer: DomSanitizer) {}
+  constructor(@Optional() private _httpClient: HttpClient, private _sanitizer: DomSanitizer) {}
 
   /**
    * Registers an icon by URL in the default namespace.
@@ -116,8 +135,10 @@ export class MdIconRegistry {
    */
   addSvgIconSetInNamespace(namespace: string, url: SafeResourceUrl): this {
     const config = new SvgIconConfig(url);
-    if (this._iconSetConfigs.has(namespace)) {
-      this._iconSetConfigs.get(namespace).push(config);
+    const configNamespace = this._iconSetConfigs.get(namespace);
+
+    if (configNamespace) {
+      configNamespace.push(config);
     } else {
       this._iconSetConfigs.set(namespace, [config]);
     }
@@ -125,14 +146,14 @@ export class MdIconRegistry {
   }
 
   /**
-   * Defines an alias for a CSS class name to be used for icon fonts. Creating an mdIcon
+   * Defines an alias for a CSS class name to be used for icon fonts. Creating an matIcon
    * component with the alias as the fontSet input will cause the class name to be applied
-   * to the <md-icon> element.
+   * to the <mat-icon> element.
    *
    * @param alias Alias for the font.
    * @param className Class name override to be used instead of the alias.
    */
-  registerFontClassAlias(alias: string, className = alias): this {
+  registerFontClassAlias(alias: string, className: string = alias): this {
     this._fontCssClassesByAlias.set(alias, className);
     return this;
   }
@@ -146,7 +167,7 @@ export class MdIconRegistry {
   }
 
   /**
-   * Sets the CSS class name to be used for icon fonts when an <md-icon> component does not
+   * Sets the CSS class name to be used for icon fonts when an <mat-icon> component does not
    * have a fontSet input value, and is not loading an icon by name or URL.
    *
    * @param className
@@ -157,7 +178,7 @@ export class MdIconRegistry {
   }
 
   /**
-   * Returns the CSS class name to be used for icon fonts when an <md-icon> component does not
+   * Returns the CSS class name to be used for icon fonts when an <mat-icon> component does not
    * have a fontSet input value, and is not loading an icon by name or URL.
    */
   getDefaultFontSetClass(): string {
@@ -165,7 +186,7 @@ export class MdIconRegistry {
   }
 
   /**
-   * Returns an Observable that produces the icon (as an <svg> DOM element) from the given URL.
+   * Returns an Observable that produces the icon (as an `<svg>` DOM element) from the given URL.
    * The response from the URL may be cached so this will not always cause an HTTP request, but
    * the produced element will always be a new copy of the originally fetched icon. (That is,
    * it will not contain any modifications made to elements previously returned).
@@ -175,34 +196,47 @@ export class MdIconRegistry {
   getSvgIconFromUrl(safeUrl: SafeResourceUrl): Observable<SVGElement> {
     let url = this._sanitizer.sanitize(SecurityContext.RESOURCE_URL, safeUrl);
 
-    if (this._cachedIconsByUrl.has(url)) {
-      return Observable.of(cloneSvg(this._cachedIconsByUrl.get(url)));
+    if (!url) {
+      throw getMatIconFailedToSanitizeError(safeUrl);
     }
-    return this._loadSvgIconFromConfig(new SvgIconConfig(url))
-        .do(svg => this._cachedIconsByUrl.set(url, svg))
-        .map(svg => cloneSvg(svg));
+
+    let cachedIcon = this._cachedIconsByUrl.get(url);
+
+    if (cachedIcon) {
+      return observableOf(cloneSvg(cachedIcon));
+    }
+
+    return this._loadSvgIconFromConfig(new SvgIconConfig(safeUrl)).pipe(
+      tap(svg => this._cachedIconsByUrl.set(url!, svg)),
+      map(svg => cloneSvg(svg))
+    );
   }
 
   /**
-   * Returns an Observable that produces the icon (as an <svg> DOM element) with the given name
+   * Returns an Observable that produces the icon (as an `<svg>` DOM element) with the given name
    * and namespace. The icon must have been previously registered with addIcon or addIconSet;
    * if not, the Observable will throw an error.
    *
    * @param name Name of the icon to be retrieved.
    * @param namespace Namespace in which to look for the icon.
    */
-  getNamedSvgIcon(name: string, namespace = ''): Observable<SVGElement> {
+  getNamedSvgIcon(name: string, namespace: string = ''): Observable<SVGElement> {
     // Return (copy of) cached icon if possible.
     const key = iconKey(namespace, name);
-    if (this._svgIconConfigs.has(key)) {
-      return this._getSvgFromConfig(this._svgIconConfigs.get(key));
+    const config = this._svgIconConfigs.get(key);
+
+    if (config) {
+      return this._getSvgFromConfig(config);
     }
+
     // See if we have any icon sets registered for the namespace.
     const iconSetConfigs = this._iconSetConfigs.get(namespace);
+
     if (iconSetConfigs) {
       return this._getSvgFromIconSetConfigs(name, iconSetConfigs);
     }
-    return Observable.throw(getMdIconNameNotFoundError(key));
+
+    return observableThrow(getMatIconNameNotFoundError(key));
   }
 
   /**
@@ -211,12 +245,13 @@ export class MdIconRegistry {
   private _getSvgFromConfig(config: SvgIconConfig): Observable<SVGElement> {
     if (config.svgElement) {
       // We already have the SVG element for this icon, return a copy.
-      return Observable.of(cloneSvg(config.svgElement));
+      return observableOf(cloneSvg(config.svgElement));
     } else {
       // Fetch the icon from the config's URL, cache it, and return a copy.
-      return this._loadSvgIconFromConfig(config)
-          .do(svg => config.svgElement = svg)
-          .map(svg => cloneSvg(svg));
+      return this._loadSvgIconFromConfig(config).pipe(
+        tap(svg => config.svgElement = svg),
+        map(svg => cloneSvg(svg))
+      );
     }
   }
 
@@ -233,43 +268,48 @@ export class MdIconRegistry {
     // For all the icon set SVG elements we've fetched, see if any contain an icon with the
     // requested name.
     const namedIcon = this._extractIconWithNameFromAnySet(name, iconSetConfigs);
+
     if (namedIcon) {
       // We could cache namedIcon in _svgIconConfigs, but since we have to make a copy every
       // time anyway, there's probably not much advantage compared to just always extracting
       // it from the icon set.
-      return Observable.of(namedIcon);
+      return observableOf(namedIcon);
     }
+
     // Not found in any cached icon sets. If there are icon sets with URLs that we haven't
     // fetched, fetch them now and look for iconName in the results.
-    const iconSetFetchRequests: Observable<SVGElement>[] = iconSetConfigs
-        .filter(iconSetConfig => !iconSetConfig.svgElement)
-        .map(iconSetConfig =>
-            this._loadSvgIconSetFromConfig(iconSetConfig)
-                .catch((err: any, caught: Observable<SVGElement>): Observable<SVGElement> => {
-                  let url =
-                      this._sanitizer.sanitize(SecurityContext.RESOURCE_URL, iconSetConfig.url);
+    const iconSetFetchRequests: Observable<SVGElement | null>[] = iconSetConfigs
+      .filter(iconSetConfig => !iconSetConfig.svgElement)
+      .map(iconSetConfig => {
+        return this._loadSvgIconSetFromConfig(iconSetConfig).pipe(
+          catchError((err: any): Observable<SVGElement | null> => {
+            let url = this._sanitizer.sanitize(SecurityContext.RESOURCE_URL, iconSetConfig.url);
 
-                  // Swallow errors fetching individual URLs so the combined Observable won't
-                  // necessarily fail.
-                  console.log(`Loading icon set URL: ${url} failed: ${err}`);
-                  return Observable.of(null);
-                })
-                .do(svg => {
-                  // Cache SVG element.
-                  if (svg) {
-                    iconSetConfig.svgElement = svg;
-                  }
-                }));
+            // Swallow errors fetching individual URLs so the combined Observable won't
+            // necessarily fail.
+            console.log(`Loading icon set URL: ${url} failed: ${err}`);
+            return observableOf(null);
+          }),
+          tap(svg => {
+            // Cache the SVG element.
+            if (svg) {
+              iconSetConfig.svgElement = svg;
+            }
+          })
+        );
+      });
+
     // Fetch all the icon set URLs. When the requests complete, every IconSet should have a
     // cached SVG element (unless the request failed), and we can check again for the icon.
-    return Observable.forkJoin(iconSetFetchRequests)
-        .map((ignoredResults: any) => {
-          const foundIcon = this._extractIconWithNameFromAnySet(name, iconSetConfigs);
-          if (!foundIcon) {
-            throw getMdIconNameNotFoundError(name);
-          }
-          return foundIcon;
-        });
+    return forkJoin(iconSetFetchRequests).pipe(map(() => {
+      const foundIcon = this._extractIconWithNameFromAnySet(name, iconSetConfigs);
+
+      if (!foundIcon) {
+        throw getMatIconNameNotFoundError(name);
+      }
+
+      return foundIcon;
+    }));
   }
 
   /**
@@ -278,7 +318,7 @@ export class MdIconRegistry {
    * returns it. Returns null if no matching element is found.
    */
   private _extractIconWithNameFromAnySet(iconName: string, iconSetConfigs: SvgIconConfig[]):
-      SVGElement {
+      SVGElement | null {
     // Iterate backwards, so icon sets added later have precedence.
     for (let i = iconSetConfigs.length - 1; i >= 0; i--) {
       const config = iconSetConfigs[i];
@@ -298,7 +338,7 @@ export class MdIconRegistry {
    */
   private _loadSvgIconFromConfig(config: SvgIconConfig): Observable<SVGElement> {
     return this._fetchUrl(config.url)
-        .map(svgText => this._createSvgElementForSingleIcon(svgText));
+        .pipe(map(svgText => this._createSvgElementForSingleIcon(svgText)));
   }
 
   /**
@@ -306,9 +346,8 @@ export class MdIconRegistry {
    * from it.
    */
   private _loadSvgIconSetFromConfig(config: SvgIconConfig): Observable<SVGElement> {
-      // TODO: Document that icons should only be loaded from trusted sources.
-    return this._fetchUrl(config.url)
-        .map(svgText => this._svgElementFromString(svgText));
+    // TODO: Document that icons should only be loaded from trusted sources.
+    return this._fetchUrl(config.url).pipe(map(svgText => this._svgElementFromString(svgText)));
   }
 
   /**
@@ -325,16 +364,26 @@ export class MdIconRegistry {
    * tag matches the specified name. If found, copies the nested element to a new SVG element and
    * returns it. Returns null if no matching element is found.
    */
-  private _extractSvgIconFromSet(iconSet: SVGElement, iconName: string): SVGElement {
+  private _extractSvgIconFromSet(iconSet: SVGElement, iconName: string): SVGElement | null {
     const iconNode = iconSet.querySelector('#' + iconName);
+
     if (!iconNode) {
       return null;
     }
+
     // If the icon node is itself an <svg> node, clone and return it directly. If not, set it as
     // the content of a new <svg> node.
-    if (iconNode.tagName.toLowerCase() == 'svg') {
+    if (iconNode.tagName.toLowerCase() === 'svg') {
       return this._setSvgAttributes(iconNode.cloneNode(true) as SVGElement);
     }
+
+    // If the node is a <symbol>, it won't be rendered so we have to convert it into <svg>. Note
+    // that the same could be achieved by referring to it via <use href="#id">, however the <use>
+    // tag is problematic on Firefox, because it needs to include the current page path.
+    if (iconNode.nodeName.toLowerCase() === 'symbol') {
+      return this._setSvgAttributes(this._toSvgElement(iconNode));
+    }
+
     // createElement('SVG') doesn't work as expected; the DOM ends up with
     // the correct nodes, but the SVG content doesn't render. Instead we
     // have to create an empty SVG node using innerHTML and append its content.
@@ -343,6 +392,7 @@ export class MdIconRegistry {
     const svg = this._svgElementFromString('<svg></svg>');
     // Clone the node so we don't remove it from the parent icon set element.
     svg.appendChild(iconNode.cloneNode(true));
+
     return this._setSvgAttributes(svg);
   }
 
@@ -356,8 +406,23 @@ export class MdIconRegistry {
     div.innerHTML = str;
     const svg = div.querySelector('svg') as SVGElement;
     if (!svg) {
-      throw new Error('<svg> tag not found');
+      throw Error('<svg> tag not found');
     }
+    return svg;
+  }
+
+  /**
+   * Converts an element into an SVG node by cloning all of its children.
+   */
+  private _toSvgElement(element: Element): SVGElement {
+    let svg = this._svgElementFromString('<svg></svg>');
+
+    for (let i = 0; i < element.childNodes.length; i++) {
+      if (element.childNodes[i].nodeType === Node.ELEMENT_NODE) {
+        svg.appendChild(element.childNodes[i].cloneNode(true));
+      }
+    }
+
     return svg;
   }
 
@@ -381,41 +446,52 @@ export class MdIconRegistry {
    * cached, so future calls with the same URL may not cause another HTTP request.
    */
   private _fetchUrl(safeUrl: SafeResourceUrl): Observable<string> {
-    if (!this._http) {
-      throw getMdIconNoHttpProviderError();
+    if (!this._httpClient) {
+      throw getMatIconNoHttpProviderError();
     }
 
     const url = this._sanitizer.sanitize(SecurityContext.RESOURCE_URL, safeUrl);
 
+    if (!url) {
+      throw getMatIconFailedToSanitizeError(safeUrl);
+    }
+
     // Store in-progress fetches to avoid sending a duplicate request for a URL when there is
     // already a request in progress for that URL. It's necessary to call share() on the
     // Observable returned by http.get() so that multiple subscribers don't cause multiple XHRs.
-    if (this._inProgressUrlFetches.has(url)) {
-      return this._inProgressUrlFetches.get(url);
+    const inProgressFetch = this._inProgressUrlFetches.get(url);
+
+    if (inProgressFetch) {
+      return inProgressFetch;
     }
 
     // TODO(jelbourn): for some reason, the `finally` operator "loses" the generic type on the
     // Observable. Figure out why and fix it.
-    const req = <Observable<string>> this._http.get(url)
-        .map(response => response.text())
-        .finally(() => {
-          this._inProgressUrlFetches.delete(url);
-        })
-        .share();
+    const req = this._httpClient.get(url, {responseType: 'text'}).pipe(
+      finalize(() => this._inProgressUrlFetches.delete(url)),
+      share()
+    );
+
     this._inProgressUrlFetches.set(url, req);
     return req;
   }
 }
 
+/** @docs-private */
 export function ICON_REGISTRY_PROVIDER_FACTORY(
-    parentRegistry: MdIconRegistry, http: Http, sanitizer: DomSanitizer) {
-  return parentRegistry || new MdIconRegistry(http, sanitizer);
+    parentRegistry: MatIconRegistry, httpClient: HttpClient, sanitizer: DomSanitizer) {
+  return parentRegistry || new MatIconRegistry(httpClient, sanitizer);
 }
 
+/** @docs-private */
 export const ICON_REGISTRY_PROVIDER = {
   // If there is already an MdIconRegistry available, use that. Otherwise, provide a new one.
-  provide: MdIconRegistry,
-  deps: [[new Optional(), new SkipSelf(), MdIconRegistry], [new Optional(), Http], DomSanitizer],
+  provide: MatIconRegistry,
+  deps: [
+    [new Optional(), new SkipSelf(), MatIconRegistry],
+    [new Optional(), HttpClient],
+    DomSanitizer
+  ],
   useFactory: ICON_REGISTRY_PROVIDER_FACTORY
 };
 

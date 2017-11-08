@@ -9,9 +9,13 @@
       </th>
     </tr>
   </thead>
+  {%- if method.description -%}
   <tr class="docs-api-method-description-row">
-    <td colspan="2" class="docs-api-method-description-cell">{$ method.description $}</td>
+    <td colspan="2" class="docs-api-method-description-cell">
+      {$ method.description | marked | safe $}
+    </td>
   </tr>
+  {%- endif -%}
 
   {%- if method.params.length -%}
   <thead>
@@ -31,7 +35,9 @@
       <code class="docs-api-method-parameter-type">{$ parameter.type $}</code>
     </td>
     <td class="docs-api-method-parameter-description-cell">
-      <p class="docs-api-method-parameter-description">{$ parameter.description $}</p>
+      <p class="docs-api-method-parameter-description">
+        {$ parameter.description | marked | safe $}
+      </p>
     </td>
   </tr>
   {% endfor %}
@@ -45,10 +51,12 @@
   </thead>
   <tr>
     <td class="docs-api-method-returns-type-cell">
-      <code class="docs-api-method-returns-type">{$ method.returnType $}</code>
+      <code class="docs-api-method-returns-type">{$ method.type $}</code>
     </td>
     <td class="docs-api-method-returns-description-cell">
-      <p class="docs-api-method-returns-description">{$ method.returns.description $}</p>
+      <p class="docs-api-method-returns-description">
+        {$ method.returns.description | marked | safe $}
+      </p>
     </td>
   </tr>
   {%- endif -%}

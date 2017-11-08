@@ -1,14 +1,21 @@
-// TypeScript config that extends the demo-app tsconfig file. This config compiles the 
+// TypeScript config that extends the demo-app tsconfig file. This config compiles the
 // "main-aot.ts" file and also enables templage code generation / AOT. All paths need
 // to be relative to the output directory.
 {
   "extends": "./tsconfig-build",
   "compilerOptions": {
+    // Needed for Moment.js since it doesn't have a default export.
+    "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
+    // TODO(paul): Remove once Angular has been upgraded and supports noUnusedParameters in AOT.
+    "noUnusedParameters": false,
+    "strictNullChecks": true,
     "outDir": ".",
     "paths": {
+      "@angular/cdk/*": ["./cdk/*"],
       "@angular/material": ["./material"],
-      "@angular/cdk": ["./cdk"]
+      "@angular/material/*": ["./material/*"],
+      "@angular/material-moment-adapter": ["./material-moment-adapter"]
     }
   },
   "files": [

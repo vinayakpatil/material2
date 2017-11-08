@@ -1,4 +1,14 @@
-import {DateAdapter} from './date-adapter';
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
+import {Inject, Injectable, Optional} from '@angular/core';
+import {extendObject} from '../util/object-extend';
+import {DateAdapter, MAT_DATE_LOCALE} from './date-adapter';
 
 
 // TODO(mmalerba): Remove when we no longer support safari 9.
@@ -29,14 +39,46 @@ const DEFAULT_DAY_OF_WEEK_NAMES = {
 };
 
 
+/**
+ * Matches strings that have the form of a valid RFC 3339 string
+ * (https://tools.ietf.org/html/rfc3339). Note that the string may not actually be a valid date
+ * because the regex will match strings an with out of bounds month, date, etc.
+ */
+const ISO_8601_REGEX =
+    /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|(?:(?:\+|-)\d{2}:\d{2}))?)?$/;
+
+
 /** Creates an array and fills it with values. */
 function range<T>(length: number, valueFunction: (index: number) => T): T[] {
-  return Array.apply(null, Array(length)).map((v: undefined, i: number) => valueFunction(i));
+  const valuesArray = Array(length);
+  for (let i = 0; i < length; i++) {
+    valuesArray[i] = valueFunction(i);
+  }
+  return valuesArray;
 }
 
-
 /** Adapts the native JS Date for use with cdk-based components that work with dates. */
+@Injectable()
 export class NativeDateAdapter extends DateAdapter<Date> {
+  /**
+   * Whether to use `timeZone: 'utc'` with `Intl.DateTimeFormat` when formatting dates.
+   * Without this `Intl.DateTimeFormat` sometimes chooses the wrong timeZone, which can throw off
+   * the result. (e.g. in the en-US locale `new Date(1800, 7, 14).toLocaleDateString()`
+   * will produce `'8/13/1800'`.
+   */
+  useUtcForDisplay: boolean;
+
+  constructor(@Optional() @Inject(MAT_DATE_LOCALE) matDateLocale: string) {
+    super();
+    super.setLocale(matDateLocale);
+
+    // IE does its own time zone correction, so we disable this on IE.
+    // TODO(mmalerba): replace with !platform.TRIDENT, logic currently duplicated to avoid breaking
+    // change from injecting the Platform.
+    this.useUtcForDisplay = !(typeof document === 'object' && !!document &&
+        /(msie|trident)/i.test(navigator.userAgent));
+  }
+
   getYear(date: Date): number {
     return date.getFullYear();
   }
@@ -104,16 +146,19 @@ export class NativeDateAdapter extends DateAdapter<Date> {
   createDate(year: number, month: number, date: number): Date {
     // Check for invalid month and date (except upper bound on date which we have to check after
     // creating the Date).
-    if (month < 0 || month > 11 || date < 1) {
-      return null;
+    if (month < 0 || month > 11) {
+      throw Error(`Invalid month index "${month}". Month index has to be between 0 and 11.`);
+    }
+
+    if (date < 1) {
+      throw Error(`Invalid date "${date}". Date has to be greater than 0.`);
     }
 
     let result = this._createDateWithOverflow(year, month, date);
 
-    // Check that the date wasn't above the upper bound for the month, causing the month to
-    // overflow.
+    // Check that the date wasn't above the upper bound for the month, causing the month to overflow
     if (result.getMonth() != month) {
-      return null;
+      throw Error(`Invalid date "${date}" for month with index "${month}".`);
     }
 
     return result;
@@ -123,15 +168,26 @@ export class NativeDateAdapter extends DateAdapter<Date> {
     return new Date();
   }
 
-  parse(value: any, parseFormat: Object): Date | null {
+  parse(value: any): Date | null {
     // We have no way using the native JS Date to set the parse format or locale, so we ignore these
     // parameters.
-    let timestamp = typeof value == 'number' ? value : Date.parse(value);
-    return isNaN(timestamp) ? null : new Date(timestamp);
+    if (typeof value == 'number') {
+      return new Date(value);
+    }
+    return value ? new Date(Date.parse(value)) : null;
   }
 
   format(date: Date, displayFormat: Object): string {
+    if (!this.isValid(date)) {
+      throw Error('NativeDateAdapter: Cannot format invalid date.');
+    }
     if (SUPPORTS_INTL_API) {
+      if (this.useUtcForDisplay) {
+        date = new Date(Date.UTC(
+            date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(),
+            date.getMinutes(), date.getSeconds(), date.getMilliseconds()));
+        displayFormat = extendObject({}, displayFormat, {timeZone: 'utc'});
+      }
       let dtf = new Intl.DateTimeFormat(this.locale, displayFormat);
       return this._stripDirectionalityCharacters(dtf.format(date));
     }
@@ -162,12 +218,46 @@ export class NativeDateAdapter extends DateAdapter<Date> {
         this.getYear(date), this.getMonth(date), this.getDate(date) + days);
   }
 
-  getISODateString(date: Date): string {
+  toIso8601(date: Date): string {
     return [
       date.getUTCFullYear(),
       this._2digit(date.getUTCMonth() + 1),
       this._2digit(date.getUTCDate())
     ].join('-');
+  }
+
+  /**
+   * Returns the given value if given a valid Date or null. Deserializes valid ISO 8601 strings
+   * (https://www.ietf.org/rfc/rfc3339.txt) into valid Dates and empty string into null. Returns an
+   * invalid date for all other values.
+   */
+  deserialize(value: any): Date | null {
+    if (typeof value === 'string') {
+      if (!value) {
+        return null;
+      }
+      // The `Date` constructor accepts formats other than ISO 8601, so we need to make sure the
+      // string is the right format first.
+      if (ISO_8601_REGEX.test(value)) {
+        let date = new Date(value);
+        if (this.isValid(date)) {
+          return date;
+        }
+      }
+    }
+    return super.deserialize(value);
+  }
+
+  isDateInstance(obj: any) {
+    return obj instanceof Date;
+  }
+
+  isValid(date: Date) {
+    return !isNaN(date.getTime());
+  }
+
+  invalid(): Date {
+    return new Date(NaN);
   }
 
   /** Creates a date but allows the month and date to overflow. */
@@ -195,10 +285,10 @@ export class NativeDateAdapter extends DateAdapter<Date> {
    * Strip out unicode LTR and RTL characters. Edge and IE insert these into formatted dates while
    * other browsers do not. We remove them to make output consistent and because they interfere with
    * date parsing.
-   * @param s The string to strip direction characters from.
+   * @param str The string to strip direction characters from.
    * @returns The stripped string.
    */
-  private _stripDirectionalityCharacters(s: string) {
-    return s.replace(/[\u200e\u200f]/g, '');
+  private _stripDirectionalityCharacters(str: string) {
+    return str.replace(/[\u200e\u200f]/g, '');
   }
 }

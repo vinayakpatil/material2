@@ -1,66 +1,101 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 import {
-  Component,
+  AfterViewInit,
   ChangeDetectionStrategy,
-  Input,
-  ViewEncapsulation,
+  Component,
+  ContentChildren,
   Directive,
   ElementRef,
+  isDevMode,
+  QueryList,
   Renderer2,
+  ViewEncapsulation
 } from '@angular/core';
+import {CanColor, mixinColor} from '@angular/material/core';
+import {Platform} from '@angular/cdk/platform';
 
+// Boilerplate for applying mixins to MatToolbar.
+/** @docs-private */
+export class MatToolbarBase {
+  constructor(public _renderer: Renderer2, public _elementRef: ElementRef) {}
+}
+export const _MatToolbarMixinBase = mixinColor(MatToolbarBase);
 
 @Directive({
-  selector: 'md-toolbar-row, mat-toolbar-row',
-  host: {
-    '[class.mat-toolbar-row]': 'true',
-  },
+  selector: 'mat-toolbar-row',
+  exportAs: 'matToolbarRow',
+  host: {'class': 'mat-toolbar-row'},
 })
-export class MdToolbarRow {}
+export class MatToolbarRow {}
 
 @Component({
   moduleId: module.id,
-  selector: 'md-toolbar, mat-toolbar',
+  selector: 'mat-toolbar',
+  exportAs: 'matToolbar',
   templateUrl: 'toolbar.html',
   styleUrls: ['toolbar.css'],
+  inputs: ['color'],
   host: {
-    '[class.mat-toolbar]': 'true',
-    'role': 'toolbar'
+    'class': 'mat-toolbar',
+    '[class.mat-toolbar-multiple-rows]': 'this._toolbarRows.length',
+    '[class.mat-toolbar-single-row]': '!this._toolbarRows.length'
   },
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None
+  encapsulation: ViewEncapsulation.None,
+  preserveWhitespaces: false,
 })
-export class MdToolbar {
+export class MatToolbar extends _MatToolbarMixinBase implements CanColor, AfterViewInit {
 
-  private _color: string;
+  /** Reference to all toolbar row elements that have been projected. */
+  @ContentChildren(MatToolbarRow) _toolbarRows: QueryList<MatToolbarRow>;
 
-  constructor(private _elementRef: ElementRef, private _renderer: Renderer2) { }
-
-  /** The color of the toolbar. Can be primary, accent, or warn. */
-  @Input()
-  get color(): string {
-    return this._color;
+  constructor(renderer: Renderer2, elementRef: ElementRef, private _platform: Platform) {
+    super(renderer, elementRef);
   }
 
-  set color(value: string) {
-    this._updateColor(value);
+  ngAfterViewInit() {
+    if (!isDevMode() || !this._platform.isBrowser) {
+      return;
+    }
+
+    this._checkToolbarMixedModes();
+    this._toolbarRows.changes.subscribe(() => this._checkToolbarMixedModes());
   }
 
-  private _updateColor(newColor: string) {
-    this._setElementColor(this._color, false);
-    this._setElementColor(newColor, true);
-    this._color = newColor;
-  }
+  /**
+   * Throws an exception when developers are attempting to combine the different toolbar row modes.
+   */
+  private _checkToolbarMixedModes() {
+    if (!this._toolbarRows.length) {
+      return;
+    }
 
-  private _setElementColor(color: string, isAdd: boolean) {
-    if (color != null && color != '') {
-      let element = this._elementRef.nativeElement;
+    // Check if there are any other DOM nodes that can display content but aren't inside of
+    // a <mat-toolbar-row> element.
+    const isCombinedUsage = [].slice.call(this._elementRef.nativeElement.childNodes)
+      .filter(node => !(node.classList && node.classList.contains('mat-toolbar-row')))
+      .filter(node => node.nodeType !== Node.COMMENT_NODE)
+      .some(node => node.textContent.trim());
 
-      if (isAdd) {
-        this._renderer.addClass(element, `mat-${color}`);
-      } else {
-        this._renderer.removeClass(element, `mat-${color}`);
-      }
+    if (isCombinedUsage) {
+      throwToolbarMixedModesError();
     }
   }
+}
 
+/**
+ * Throws an exception when attempting to combine the different toolbar row modes.
+ * @docs-private
+ */
+export function throwToolbarMixedModesError() {
+  throw Error('MatToolbar: Attempting to combine different toolbar modes. ' +
+    'Either specify multiple `<mat-toolbar-row>` elements explicitly or just place content ' +
+    'inside of a `<mat-toolbar>` for a single row.');
 }

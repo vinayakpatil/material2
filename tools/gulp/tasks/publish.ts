@@ -2,19 +2,20 @@ import {spawn} from 'child_process';
 import {existsSync, statSync} from 'fs-extra';
 import {join} from 'path';
 import {task} from 'gulp';
-import {execTask, sequenceTask} from '../util/task_helpers';
-import {DIST_RELEASES} from '../constants';
+import {execTask} from '../util/task_helpers';
+import {buildConfig, sequenceTask} from 'material2-build-tools';
 import {yellow, green, red, grey} from 'chalk';
 import * as minimist from 'minimist';
 
-/** Parse command-line arguments for release task. */
-const argv = minimist(process.argv.slice(3));
-
-/** Packages that will be published to NPM. */
-const releasePackages = [
+/** Packages that will be published to NPM by the release task. */
+export const releasePackages = [
   'cdk',
   'material',
+  'material-moment-adapter'
 ];
+
+/** Parse command-line arguments for release task. */
+const argv = minimist(process.argv.slice(3));
 
 /** Task that builds all releases that will be published. */
 task(':publish:build-releases', sequenceTask(
@@ -31,8 +32,8 @@ task(':publish:whoami', execTask('npm', ['whoami'], {
 task(':publish:logout', execTask('npm', ['logout']));
 
 
-function _execNpmPublish(label: string, packageName: string): Promise<{}> {
-  const packageDir = join(DIST_RELEASES, packageName);
+function _execNpmPublish(label: string, packageName: string): Promise<{}> | undefined {
+  const packageDir = join(buildConfig.outputDir, 'releases', packageName);
 
   if (!statSync(packageDir).isDirectory()) {
     return;
@@ -50,7 +51,12 @@ function _execNpmPublish(label: string, packageName: string): Promise<{}> {
   console.log(green(`Publishing ${packageName}...`));
 
   const command = 'npm';
-  const args = ['publish', '--access', 'public', label ? `--tag` : undefined, label || undefined];
+  const args = ['publish', '--access', 'public'];
+
+  if (label) {
+    args.push('--tag', label);
+  }
+
   return new Promise((resolve, reject) => {
     console.log(grey(`Executing: ${command} ${args.join(' ')}`));
     if (argv['dry']) {
@@ -91,6 +97,7 @@ task(':publish', async () => {
 
   if (releasePackages.length > 1) {
     console.warn(red('Warning: Multiple packages will be released if proceeding.'));
+    console.warn(red('Warning: Packages to be released: ', releasePackages.join(', ')));
   }
 
   // Iterate over every declared release package and publish it on NPM.
@@ -104,6 +111,7 @@ task(':publish', async () => {
 task('publish', sequenceTask(
   ':publish:whoami',
   ':publish:build-releases',
+  'validate-release:check-bundles',
   ':publish',
   ':publish:logout',
 ));

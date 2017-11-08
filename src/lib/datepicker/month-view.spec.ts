@@ -1,26 +1,20 @@
 import {async, ComponentFixture, TestBed} from '@angular/core/testing';
 import {Component} from '@angular/core';
 import {By} from '@angular/platform-browser';
-import {MdMonthView} from './month-view';
-import {MdCalendarBody} from './calendar-body';
-import {MdNativeDateModule} from '../core/datetime/index';
+import {MatMonthView} from './month-view';
+import {MatCalendarBody} from './calendar-body';
+import {MatNativeDateModule} from '@angular/material/core';
+import {JAN, MAR} from '@angular/material/core';
 
-
-// When constructing a Date, the month is zero-based. This can be confusing, since people are
-// used to seeing them one-based. So we create these aliases to make reading the tests easier.
-const JAN = 0, FEB = 1, MAR = 2, APR = 3, MAY = 4, JUN = 5, JUL = 6, AUG = 7, SEP = 8, OCT = 9,
-      NOV = 10, DEC = 11;
-
-
-describe('MdMonthView', () => {
+describe('MatMonthView', () => {
   beforeEach(async(() => {
     TestBed.configureTestingModule({
       imports: [
-        MdNativeDateModule,
+        MatNativeDateModule,
       ],
       declarations: [
-        MdCalendarBody,
-        MdMonthView,
+        MatCalendarBody,
+        MatMonthView,
 
         // Test components.
         StandardMonthView,
@@ -40,23 +34,23 @@ describe('MdMonthView', () => {
       fixture = TestBed.createComponent(StandardMonthView);
       fixture.detectChanges();
 
-      let monthViewDebugElement = fixture.debugElement.query(By.directive(MdMonthView));
+      let monthViewDebugElement = fixture.debugElement.query(By.directive(MatMonthView));
       monthViewNativeElement = monthViewDebugElement.nativeElement;
       testComponent = fixture.componentInstance;
     });
 
     it('has correct month label', () => {
-      let labelEl = monthViewNativeElement.querySelector('.mat-calendar-body-label');
+      let labelEl = monthViewNativeElement.querySelector('.mat-calendar-body-label')!;
       expect(labelEl.innerHTML.trim()).toBe('JAN');
     });
 
     it('has 31 days', () => {
-      let cellEls = monthViewNativeElement.querySelectorAll('.mat-calendar-body-cell');
+      let cellEls = monthViewNativeElement.querySelectorAll('.mat-calendar-body-cell')!;
       expect(cellEls.length).toBe(31);
     });
 
     it('shows selected date if in same month', () => {
-      let selectedEl = monthViewNativeElement.querySelector('.mat-calendar-body-selected');
+      let selectedEl = monthViewNativeElement.querySelector('.mat-calendar-body-selected')!;
       expect(selectedEl.innerHTML.trim()).toBe('10');
     });
 
@@ -73,7 +67,7 @@ describe('MdMonthView', () => {
       (cellEls[cellEls.length - 1] as HTMLElement).click();
       fixture.detectChanges();
 
-      let selectedEl = monthViewNativeElement.querySelector('.mat-calendar-body-selected');
+      let selectedEl = monthViewNativeElement.querySelector('.mat-calendar-body-selected')!;
       expect(selectedEl.innerHTML.trim()).toBe('31');
     });
 
@@ -93,7 +87,7 @@ describe('MdMonthView', () => {
       fixture = TestBed.createComponent(MonthViewWithDateFilter);
       fixture.detectChanges();
 
-      let monthViewDebugElement = fixture.debugElement.query(By.directive(MdMonthView));
+      let monthViewDebugElement = fixture.debugElement.query(By.directive(MatMonthView));
       monthViewNativeElement = monthViewDebugElement.nativeElement;
       testComponent = fixture.componentInstance;
     });
@@ -108,7 +102,7 @@ describe('MdMonthView', () => {
 
 
 @Component({
-  template: `<md-month-view [activeDate]="date" [(selected)]="selected"></md-month-view>`,
+  template: `<mat-month-view [activeDate]="date" [(selected)]="selected"></mat-month-view>`,
 })
 class StandardMonthView {
   date = new Date(2017, JAN, 5);
@@ -117,7 +111,7 @@ class StandardMonthView {
 
 
 @Component({
-  template: `<md-month-view [activeDate]="activeDate" [dateFilter]="dateFilter"></md-month-view>`
+  template: `<mat-month-view [activeDate]="activeDate" [dateFilter]="dateFilter"></mat-month-view>`
 })
 class MonthViewWithDateFilter {
   activeDate = new Date(2017, JAN, 1);
